@@ -3,6 +3,8 @@
 Kuşbakışı bir şehirde araba sürdüğün, görev yapıp kaos çıkardığın bir tarayıcı oyunu.
 Düz HTML + CSS + JavaScript (canvas). Kurulum, kütüphane ya da derleme yok.
 
+🎮 **Hemen oyna:** https://muhammedozkul.github.io/kaos-kent/
+
 ## Çalıştırma
 
 ```bash
