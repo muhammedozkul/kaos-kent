@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kaos Kent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Oyunun çizildiği tuval -->
+  <canvas id="oyun"></canvas>
+
+  <!-- Oyun içi gösterge paneli (HUD) -->
+  <div id="hud" class="gizli">
+    <div id="sol-ust" class="panel">
+      <div id="para">₺0</div>
+      <div class="satir"><span id="saat-ikon">☀️</span> <span id="saat">12:00</span> · Kaos <b id="kaos">0</b></div>
+    </div>
+
+    <div id="yildizlar"></div>
+
+    <div id="gorev-panel" class="panel gizli">
+      <div id="gorev-baslik"></div>
+      <div id="gorev-detay"></div>
+      <div id="gorev-sure"></div>
+    </div>
+
+    <div id="bildirimler"></div>
+    <div id="duyuru"></div>
+    <div id="ipucu" class="gizli"></div>
+
+    <div id="yakalanma" class="gizli">
+      <div>YAKALANIYORSUN!</div>
+      <div class="cubuk"><i id="yakalanma-dolu"></i></div>
+    </div>
+
+    <div id="sol-alt" class="panel">
+      <div id="hiz-kutu"><span id="hiz">0</span><small>km/sa</small></div>
+      <div class="cubuk-satir"><label>❤️</label><div class="cubuk"><i id="can-dolu"></i></div></div>
+      <div class="cubuk-satir"><label>🔥</label><div class="cubuk nitro"><i id="nitro-dolu"></i></div></div>
+    </div>
+
+    <canvas id="mini"></canvas>
+  </div>
+
+  <!-- Giriş ekranı -->
+  <div id="giris" class="ekran">
+    <div class="kart">
+      <h1>KAOS<span>KENT</span></h1>
+      <p class="alt">Şehir senin. Kurallar? Pek sayılmaz.</p>
+      <div class="kontroller">
+        <div><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / oklar</span><em>sür</em></div>
+        <div><span><kbd>Boşluk</kbd></span><em>el freni (drift)</em></div>
+        <div><span><kbd>Shift</kbd></span><em>nitro</em></div>
+        <div><span><kbd>E</kbd></span><em>tamirhane</em></div>
+        <div><span><kbd>H</kbd></span><em>korna</em></div>
+        <div><span><kbd>G</kbd></span><em>görevi bırak</em></div>
+        <div><span><kbd>P</kbd> / <kbd>Esc</kbd></span><em>duraklat</em></div>
+        <div><span><kbd>M</kbd></span><em>ses aç/kapat</em></div>
+      </div>
+      <p class="ipucu-metin">Haritadaki renkli simgelere sür, görev başlasın.<br>Ne kadar kaos, o kadar polis ★</p>
+      <button id="basla">BAŞLA</button>
+    </div>
+  </div>
+
+  <!-- Duraklatma ekranı -->
+  <div id="duraklat" class="ekran gizli">
+    <div class="kart">
+      <h2>Duraklatıldı</h2>
+      <div id="istatistik"></div>
+      <button id="devam">DEVAM</button>
+      <div><button id="sifirla" class="ikincil">Kaydı sıfırla</button></div>
+    </div>
+  </div>
+
+  <!-- Tamirhane / mağaza -->
+  <div id="magaza" class="ekran gizli">
+    <div class="kart genis">
+      <h2>🔧 Tamirhane</h2>
+      <div id="magaza-para"></div>
+      <div id="magaza-liste"></div>
+      <button id="magaza-kapat" class="ikincil">Çık (E)</button>
+    </div>
+  </div>
+
+  <script src="js/yardimci.js"></script>
+  <script src="js/harita.js"></script>
+  <script src="js/araba.js"></script>
+  <script src="js/efektler.js"></script>
+  <script src="js/trafik.js"></script>
+  <script src="js/gorevler.js"></script>
+  <script src="js/hud.js"></script>
+  <script src="js/oyun.js"></script>
+</body>
+</html>
