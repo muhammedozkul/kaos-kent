@@ -7,9 +7,27 @@ const Efekt = {
 
   ekle(o) { if (this.p.length < 1400) this.p.push(o); },
 
-  duman(x, y, koyu) {
-    this.ekle({ x, y, vx: aralik(-14, 14), vy: aralik(-14, 14), yas: 0, omur: aralik(0.9, 1.7),
-      r: aralik(5, 9), buyu: 16, renk: koyu ? '35,35,38' : '215,215,220', alfa: koyu ? 0.45 : 0.3, surt: 1 });
+  duman(x, y, koyu, ust = false) {
+    this.ekle({ x, y, vx: aralik(-14, 14) + (ust ? 25 : 0), vy: aralik(-14, 14) - (ust ? 10 : 0), yas: 0, omur: aralik(0.9, 1.7),
+      r: aralik(5, 9), buyu: ust ? 22 : 16, renk: koyu ? '35,35,38' : '215,215,220', alfa: koyu ? 0.45 : 0.3, surt: 1, ust });
+  },
+
+  // Bina çatısındaki yangın alevi (binaların üstünde çizilir)
+  alev(x, y) {
+    this.ekle({ x, y, vx: aralik(-10, 10) + 12, vy: aralik(-16, 4), yas: 0, omur: aralik(0.35, 0.8),
+      r: aralik(5, 11), buyu: 12, renk: sec(['255,200,60', '255,140,40', '255,90,30', '255,230,120']), alfa: 0.85, surt: 1, parlak: true, ust: true });
+  },
+
+  // İtfaiyenin hortumundan su
+  fiskirt(x, y, hx, hy) {
+    const a = Math.atan2(hy - y, hx - x) + aralik(-0.12, 0.12), h = aralik(300, 420);
+    this.ekle({ x, y, vx: Math.cos(a) * h, vy: Math.sin(a) * h, yas: 0, omur: Math.min(0.6, mesafe(x, y, hx, hy) / h),
+      r: aralik(2, 3.5), buyu: 6, renk: '170,215,255', alfa: 0.8, surt: 0.5, ust: true });
+  },
+
+  // Yağmurda yere düşen damlanın halkası
+  halka(x, y) {
+    this.ekle({ x, y, vx: 0, vy: 0, yas: 0, omur: 0.45, r: 1, buyu: 16, renk: '200,220,255', alfa: 0.4, surt: 0, halka: true });
   },
 
   kivilcim(x, y, n) {
@@ -66,11 +84,16 @@ const Efekt = {
     }
   },
 
-  ciz(c) {
+  // ust = false: arabaların seviyesindekiler, true: binaların üstünde kalanlar (yangın, hortum)
+  ciz(c, ust = false) {
     for (const q of this.p) {
+      if (!!q.ust !== ust) continue;
       const a = q.alfa * (1 - q.yas / q.omur);
       if (q.parlak) c.globalCompositeOperation = 'lighter';
-      if (q.cizgi) {
+      if (q.halka) {
+        c.strokeStyle = `rgba(${q.renk},${a})`; c.lineWidth = 1;
+        c.beginPath(); c.arc(q.x, q.y, q.r, 0, Math.PI * 2); c.stroke();
+      } else if (q.cizgi) {
         c.strokeStyle = `rgba(${q.renk},${a})`; c.lineWidth = q.r;
         c.beginPath(); c.moveTo(q.x, q.y); c.lineTo(q.x - q.vx * 0.03, q.y - q.vy * 0.03); c.stroke();
       } else {

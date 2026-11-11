@@ -1,31 +1,38 @@
 'use strict';
 // ── Kaos Kent · ana oyun: durum, döngü, çarpışmalar, aranma sistemi, çizim ──
+//
+// Oyun.oyuncu: şu an kontrol ettiğin şey. Arabadaysan bir Araba (tur 'oyuncu'),
+// yürüyorsan bir Yaya. F ile ikisi arasında geçiş yapılır.
 
 const tuval = document.getElementById('oyun');
 const g = tuval.getContext('2d');
-const isikTuval = document.createElement('canvas'); // gece karanlığı bu tuvalde hazırlanır
+const isikTuval = document.createElement('canvas');
 const ig = isikTuval.getContext('2d');
 
-const YILDIZ_ESIK = [0, 20, 70, 140, 230, 330]; // kaç "ısı" puanında kaç yıldız
-const GUN_SURESI = 300;                         // bir gün = 5 dakika
-const SIVIL_SAYISI = 42;
+const YILDIZ_ESIK = [0, 20, 70, 140, 230, 330];
+const GUN_SURESI = 300;
+const SIVIL_SAYISI = 70;
+const YAYA_SAYISI = 130;
+const DEVRIYE_SAYISI = 3;
 const KAYIT_ANAHTARI = 'kaosKent.kayit.v1';
 const SIVIL_RENKLER = ['#4361ee', '#f1faee', '#2a9d8f', '#e9c46a', '#f4a261', '#8d99ae', '#6d597a',
   '#90be6d', '#577590', '#e5e5e5', '#1d3557', '#bc4749'];
 const OYUNCU_RENKLER = ['#e63946', '#ff9f1c', '#06d6a0', '#4cc9f0', '#9b5de5', '#f15bb5', '#222831'];
-const VARSAYILAN_KAYIT = { para: 200, motor: 0, zirh: 0, nitro: 0, renk: 0, gorev: 0, kaos: 0, enYildiz: 0, yakalanma: 0, pert: 0 };
+const VARSAYILAN_KAYIT = { para: 200, motor: 0, zirh: 0, nitro: 0, renk: 0, gorev: 0, kaos: 0, enYildiz: 0, yakalanma: 0, pert: 0, bayilma: 0 };
 
 const Oyun = {
   durum: 'giris',      // 'giris' | 'oyun' | 'duraklat' | 'magaza'
   zaman: 0, gunZamani: 0.3, dpr: 1, karanlik: 0,
-  oyuncu: null, arabalar: [], izlenen: null, izlemeBitis: 0,
+  oyuncu: null, arabalar: [], yayalar: [], izlenen: null, izlemeBitis: 0,
+  yayaCan: 100,        // arabadayken yürüyen hâlinin canı burada saklanır
   kayit: { ...VARSAYILAN_KAYIT },
   isi: 0, yildiz: 0, gizliSure: 0, polisGoruyor: false, gorusSayac: 0, yakalanma: 0,
-  olay: null,          // pert / yakalandı arası
+  olay: null, kornaZamani: -9,
   nitroKapasite: 3,
   kamera: { x: 0, y: 0, zoom: 1, sarsinti: 0 },
   gorus: { x0: 0, y0: 0, x1: 1, y1: 1 },
   anlikIsiklar: [], cizilenBinalar: [],
+  istasyon: { ambulans: null, itfaiye: null }, istasyonSayac: 0,
   polisSayac: 0, sivilSayac: 0, kayitSayac: 0,
 
   kaydet() { try { localStorage.setItem(KAYIT_ANAHTARI, JSON.stringify(this.kayit)); } catch (e) { /* gizli sekme vb. */ } },
@@ -35,16 +42,17 @@ const Oyun = {
       if (k && typeof k === 'object') this.kayit = { ...VARSAYILAN_KAYIT, ...k };
     } catch (e) { /* kayıt yoksa varsayılan */ }
   },
+  // Yükseltmeleri o an sürülen arabaya uygula
   oyuncuOzellik() {
-    const k = this.kayit, o = this.oyuncu;
-    o.maxHiz = 500 + k.motor * 40;
-    o.ivme = 440 + k.motor * 50;
-    this.nitroKapasite = 3 + k.nitro * 1.2;
+    this.nitroKapasite = 3 + this.kayit.nitro * 1.2;
+    if (this.oyuncu instanceof Araba) this.oyuncu.oyuncuOzelligi(this.kayit.motor);
   },
+  aracta() { return this.oyuncu instanceof Araba; },
   paraEkle(m) { this.kayit.para = Math.max(0, this.kayit.para + m); },
   tamirhanede() {
-    const t = Harita.tamirhane, o = this.oyuncu;
-    return this.durum === 'oyun' && o.x > t.x && o.x < t.x + t.w && o.y > t.y && o.y < t.y + t.h;
+    const o = this.oyuncu;
+    if (this.durum !== 'oyun' || !(o instanceof Araba)) return false;
+    return Harita.tamirhaneler.some(t => o.x > t.x && o.x < t.x + t.w && o.y > t.y && o.y < t.y + t.h);
   },
   gorusteMi(x, y, pay = 80) {
     const v = this.gorus;
@@ -69,21 +77,24 @@ function kur() {
   Oyun.yukle();
   Hud.kur();
 
-  const t = Harita.tamirhane;
-  const o = new Araba(t.x + t.w / 2, t.y + t.h / 2, Math.PI / 2,
-    { tur: 'oyuncu', model: 'spor', renk: OYUNCU_RENKLER[Oyun.kayit.renk % OYUNCU_RENKLER.length], tutus: 6.5 });
-  o.kutle = 1.25;
-  Oyun.oyuncu = o;
+  Oyun.oyuncu = oyuncuArabasiOlustur(Harita.tamirhaneler[0]);
   Oyun.oyuncuOzellik();
-  Oyun.arabalar.push(o);
 
   for (const p of Harita.parkYerleri) {
     if (Math.random() < 0.55)
-      Oyun.arabalar.push(new Araba(p.x, p.y, p.aci, { tur: 'park', model: sec(['sedan', 'hatch', 'hatch', 'van', 'sedan']), renk: sec(SIVIL_RENKLER) }));
+      Oyun.arabalar.push(new Araba(p.x, p.y, p.aci, { tur: 'park', model: sec(['sedan', 'hatch', 'hatch', 'van', 'sedan', 'spor']), renk: sec(SIVIL_RENKLER) }));
   }
   for (let i = 0; i < SIVIL_SAYISI; i++) sivilEkle(false);
   const kk = Harita.karakol;
-  for (let i = 0; i < 2; i++) rotayaBagla(polisOlustur(kk.x - 60 + i * 120, kk.y, Math.PI / 2));
+  for (let i = 0; i < DEVRIYE_SAYISI; i++) rotayaBagla(polisOlustur(kk.x - 90 + i * 90, kk.y, Math.PI / 2));
+  for (let i = 0; i < YAYA_SAYISI; i++) {
+    const h = sec(Harita.halkalar), t = Math.random() * 2 * (h.w + h.h), p = halkaNokta(h, t);
+    const y = new Yaya(0, 0, { halka: h, t });
+    y.x = p.x + p.nx * y.kayma; y.y = p.y + p.ny * y.kayma;
+    Oyun.yayalar.push(y);
+  }
+  istasyonAraci('ambulans');
+  istasyonAraci('itfaiye');
 
   Gorevler.baslat();
   boyutla();
@@ -97,6 +108,20 @@ function boyutla() {
   Oyun.dpr = dpr;
   tuval.width = isikTuval.width = Math.floor(innerWidth * dpr);
   tuval.height = isikTuval.height = Math.floor(innerHeight * dpr);
+}
+
+function oyuncuArabasiOlustur(t) {
+  const o = new Araba(t.x + t.w / 2, t.y + t.h / 2, Math.PI / 2,
+    { tur: 'oyuncu', model: 'spor', renk: OYUNCU_RENKLER[Oyun.kayit.renk % OYUNCU_RENKLER.length] });
+  o.oyuncuOzelligi(Oyun.kayit.motor);
+  Oyun.arabalar.push(o);
+  return o;
+}
+
+function enYakinTamirhane(x, y) {
+  let en = Harita.tamirhaneler[0], enD = Infinity;
+  for (const t of Harita.tamirhaneler) { const d = mesafe(x, y, t.x + t.w / 2, t.y + t.h / 2); if (d < enD) { enD = d; en = t; } }
+  return en;
 }
 
 function sivilEkle(gorusDisi) {
@@ -123,7 +148,27 @@ function polisOlustur(x, y, aci) {
   return p;
 }
 
-// Oyuncudan belli uzaklıkta (istenirse ekran dışında) bir şerit noktası
+// Hastane ve itfaiye otoparkındaki görev aracı
+const ISTASYON = { ambulans: 'hastane', itfaiye: 'itfaiye' };
+function istasyonAraci(tur) {
+  const yer = Harita[ISTASYON[tur]].arac;
+  const a = new Araba(yer.x, yer.y, yer.aci, { tur: 'park', model: tur, renk: tur === 'ambulans' ? '#f8f9fa' : '#d00000' });
+  Oyun.arabalar.push(a);
+  Oyun.istasyon[tur] = a;
+}
+
+// Görev aracı yerinden ayrıldıysa (ve kimse bakmıyorsa) yenisini koy
+function istasyonKontrol(dt) {
+  Oyun.istasyonSayac -= dt;
+  if (Oyun.istasyonSayac > 0) return;
+  Oyun.istasyonSayac = 3;
+  for (const tur of ['ambulans', 'itfaiye']) {
+    const a = Oyun.istasyon[tur], yer = Harita[ISTASYON[tur]].arac;
+    if (a === Oyun.oyuncu || Oyun.gorusteMi(yer.x, yer.y, 120)) continue;
+    if (!a || a.yikik || !Oyun.arabalar.includes(a) || mesafe(a.x, a.y, yer.x, yer.y) > 300) istasyonAraci(tur);
+  }
+}
+
 function uzakSerit(min, max, gorusDisi) {
   const o = Oyun.oyuncu;
   for (let d = 0; d < 40; d++) {
@@ -135,6 +180,71 @@ function uzakSerit(min, max, gorusDisi) {
   return null;
 }
 
+// ── Arabadan inme / arabaya binme ──
+function yakinAraba(y) {
+  let en = null, enD = 30;
+  for (const a of Oyun.arabalar) {
+    if (a.yikik || a.hiz > 150) continue;
+    const d = mesafe(a.x, a.y, y.x, y.y) - a.r;
+    if (d < enD) { enD = d; en = a; }
+  }
+  return en;
+}
+
+// Arabanın solunda (yoksa sağında) boş bir yer
+function arabaYani(a, pay = 12) {
+  const c = Math.cos(a.aci), s = Math.sin(a.aci), u = a.gen / 2 + pay;
+  for (const yan of [1, -1]) {
+    const x = a.x + s * yan * u, y = a.y - c * yan * u;
+    if (!Harita.katiNokta(x, y)) return { x, y };
+  }
+  return { x: a.x, y: a.y };
+}
+
+function binInDegistir() {
+  const O = Oyun, ben = O.oyuncu;
+  if (O.olay) return;
+  if (ben instanceof Yaya) {
+    if (ben.durum === 'yerde') return;
+    const a = yakinAraba(ben);
+    if (a) arabayaBin(a); else Hud.bildirim('Yakında binilecek araba yok');
+  } else arabadanIn();
+}
+
+function arabadanIn() {
+  const O = Oyun, a = O.oyuncu;
+  if (a.hiz > 90) { Hud.bildirim('Önce yavaşla!'); return; }
+  const yer = arabaYani(a);
+  const y = new Yaya(yer.x, yer.y, { oyuncu: true, gomlek: '#ffd60a' });
+  y.can = O.yayaCan; y.aci = a.aci;
+  a.tur = 'park'; a.siren = false; a.taksi = false; a.sonIz = null;
+  const gi = a.girdi; gi.gaz = 0; gi.fren = 0; gi.dir = 0; gi.nitro = false; gi.elFreni = false; gi.tutma = true;
+  O.oyuncu = y;
+  Ses.ton(240, 0.08, 'square', 0.05);
+}
+
+function arabayaBin(a) {
+  const O = Oyun, y = O.oyuncu;
+  if (a.tur === 'sivil') { surucuIndir(a); O.isiEkle(8); O.kaosEkle(3, a.x, a.y); }
+  else if (a.tur === 'polis') { O.isiEkle(45); O.kaosEkle(10, a.x, a.y); Hud.bildirim('🚓 Polis arabası çaldın!'); }
+  a.tur = 'oyuncu'; a.siren = false; a.kovalama = false; a.sersem = 0; a.geriSure = 0; a.takilma = 0; a.sil = false; a.rota = null;
+  O.yayaCan = y.can;
+  O.oyuncu = a;
+  O.oyuncuOzellik();
+  Ses.ton(300, 0.08, 'square', 0.05); Ses.ton(420, 0.1, 'square', 0.05, 0.06);
+  if ((a.model === 'ambulans' || a.model === 'itfaiye') && !Gorevler.aktif) Gorevler.gorevBaslat({ tur: a.model });
+  else Hud.bildirim(`🚗 ${a.ad}`);
+}
+
+// Çalınan arabanın sürücüsü dışarı fırlar ve kaçar
+function surucuIndir(a) {
+  const yer = arabaYani(a, 10), O = Oyun;
+  const s = new Yaya(yer.x, yer.y);
+  s.kac(O.oyuncu.x, O.oyuncu.y, 0, 0);
+  O.yayalar.push(s);
+  Efekt.yazi(s.x, s.y - 16, sec(['Arabam!', 'Hırsız var!', 'Polis!']), '#ffffff');
+}
+
 // ── Düğmeler ve ekranlar ──
 function dugmeleriBagla() {
   document.getElementById('basla').onclick = e => { e.currentTarget.blur(); oyunuBaslat(); };
@@ -143,7 +253,7 @@ function dugmeleriBagla() {
   document.getElementById('sifirla').onclick = () => {
     if (!confirm('Para, yükseltmeler ve istatistikler sıfırlansın mı?')) return;
     Oyun.kayit = { ...VARSAYILAN_KAYIT };
-    Oyun.oyuncu.renkAyarla(OYUNCU_RENKLER[0]);
+    if (Oyun.aracta() && Oyun.oyuncu.model === 'spor') Oyun.oyuncu.renkAyarla(OYUNCU_RENKLER[0]);
     Oyun.oyuncuOzellik();
     Oyun.kaydet();
     duraklat();
@@ -157,7 +267,7 @@ function oyunuBaslat() {
   Oyun.durum = 'oyun';
   document.getElementById('giris').classList.add('gizli');
   Hud.goster(true);
-  const o = Oyun.oyuncu, t = Harita.tamirhane;
+  const o = Oyun.oyuncu, t = Harita.tamirhaneler[0];
   o.x = t.x + t.w / 2; o.y = t.y + t.h / 2; o.vx = o.vy = 0; o.aci = Math.PI / 2;
   o.can = 100; o.yikik = false;
   Oyun.kamera.x = o.x; Oyun.kamera.y = o.y;
@@ -168,7 +278,7 @@ function duraklat() {
   Oyun.durum = 'duraklat';
   const k = Oyun.kayit;
   const satirlar = [['Para', paraYaz(k.para)], ['Tamamlanan görev', k.gorev], ['Toplam kaos', k.kaos],
-    ['En yüksek aranma', '★'.repeat(k.enYildiz) || '—'], ['Yakalanma', k.yakalanma], ['Pert', k.pert]];
+    ['En yüksek aranma', '★'.repeat(k.enYildiz) || '—'], ['Yakalanma', k.yakalanma], ['Pert / bayılma', `${k.pert} / ${k.bayilma}`]];
   const el = document.getElementById('istatistik');
   el.textContent = '';
   for (const [ad, deger] of satirlar) {
@@ -189,12 +299,15 @@ function devam() {
 
 // ── Ana döngü ──
 let sonZaman = performance.now();
+let sonDt = 0;
 function dongu(simdi) {
   const dt = Math.min(0.05, (simdi - sonZaman) / 1000);
   sonZaman = simdi;
   girdiIsle();
-  if (Oyun.durum === 'oyun' || Oyun.durum === 'giris') guncelle(dt);
+  const calisiyor = Oyun.durum === 'oyun' || Oyun.durum === 'giris';
+  if (calisiyor) guncelle(dt);
   else Ses.durgun();
+  sonDt = calisiyor ? dt : 0;
   ciz();
   Tus.yeni.clear();
   requestAnimationFrame(dongu);
@@ -206,12 +319,13 @@ function girdiIsle() {
   if (Tus.yeniBasildi('KeyM')) Hud.bildirim(Ses.degistir() ? '🔊 Ses açık' : '🔇 Ses kapalı');
   if (d === 'oyun') {
     if (Tus.yeniBasildi('KeyP', 'Escape')) { duraklat(); return; }
+    if (Tus.yeniBasildi('KeyF')) binInDegistir();
     if (Tus.yeniBasildi('KeyE') && Oyun.tamirhanede() && !Oyun.olay) {
       if (Oyun.yildiz > 0) Hud.bildirim('🚓 Polis peşindeyken tamirhane kapalı!');
       else Magaza.ac();
     }
     if (Tus.yeniBasildi('KeyG') && Gorevler.aktif) Gorevler.bitir(false, 0, 'Görevi bıraktın.');
-    if (Tus.yeniBasildi('KeyH')) Ses.korna();
+    if (Tus.yeniBasildi('KeyH') && Oyun.aracta()) { Ses.korna(); Oyun.kornaZamani = Oyun.zaman; }
   } else if (d === 'duraklat') {
     if (Tus.yeniBasildi('KeyP', 'Escape', 'Enter')) devam();
   } else if (d === 'magaza') {
@@ -220,8 +334,8 @@ function girdiIsle() {
   }
 }
 
-function oyuncuGirdisi(dt, aktif) {
-  const o = Oyun.oyuncu, gi = o.girdi;
+function aracKontrol(o, dt, aktif) {
+  const gi = o.girdi;
   if (!aktif) {
     gi.gaz = 0; gi.fren = 0; gi.dir = 0; gi.elFreni = false; gi.nitro = false; gi.tutma = true;
     return;
@@ -241,20 +355,27 @@ function oyuncuGirdisi(dt, aktif) {
 }
 
 function guncelle(dt) {
-  const O = Oyun, o = O.oyuncu, oyunda = O.durum === 'oyun';
+  const O = Oyun, oyunda = O.durum === 'oyun';
   O.zaman += dt;
   O.gunZamani = (O.gunZamani + dt / GUN_SURESI) % 1;
+  Hava.guncelle(dt, oyunda);
 
-  oyuncuGirdisi(dt, oyunda && !O.olay);
+  const ben = O.oyuncu, yuruyor = ben instanceof Yaya, aktif = oyunda && !O.olay;
+  if (yuruyor) { if (aktif) yayaKontrol(ben, dt); else { ben.vx = ben.vy = 0; } }
+  else { aracKontrol(ben, dt, aktif); O.yayaCan = Math.min(100, O.yayaCan + dt * 2); }
+
   for (const a of O.arabalar) {
     if (a.tur === 'sivil') sivilYZ(a, dt, O);
     else if (a.tur === 'polis') polisYZ(a, dt, O);
-    else if (a.tur === 'park') { const gi = a.girdi; gi.gaz = 0; gi.fren = 0; gi.dir = 0; gi.tutma = true; }
+    else if (a.tur === 'park') { const gi = a.girdi; gi.gaz = 0; gi.fren = 0; gi.dir = 0; gi.tutma = true; gi.nitro = false; gi.elFreni = false; }
   }
+  for (const y of O.yayalar) yayaYZ(y, dt, O);
   for (const a of O.arabalar) { a.fizik(dt); binaCarpisma(a); }
   arabaCarpismalari();
+  yayaCarpismalari();
   esyaCarpismalari();
   esyaGuncelle(dt);
+  yanginGuncelle(dt);
 
   for (const a of O.arabalar) {
     izBirak(a);
@@ -264,6 +385,7 @@ function guncelle(dt) {
     else if (a.can < 35 && Math.random() < dt * 10) Efekt.duman(a.x + c * a.uzun * 0.35, a.y + s * a.uzun * 0.35, a.can < 20);
     if (a.girdi.nitro) { Efekt.nitro(a); Efekt.nitro(a); }
     if (a.kayma > 220 && Math.random() < dt * 20) Efekt.duman(a.x - c * a.uzun * 0.4, a.y - s * a.uzun * 0.4, false);
+    if (Hava.guc > 0.15 && a.hiz > 150) birikintiSicrat(a);
   }
   Efekt.guncelle(dt);
   for (let i = O.anlikIsiklar.length - 1; i >= 0; i--) {
@@ -282,13 +404,15 @@ function guncelle(dt) {
   }
   polisYonet(dt);
   sivilYonet(dt);
+  istasyonKontrol(dt);
   temizle();
   kameraGuncelle(dt);
 
   if (oyunda) {
-    let enYakin = Infinity;
-    for (const p of O.arabalar) if (p.siren) enYakin = Math.min(enYakin, mesafe(p.x, p.y, o.x, o.y));
-    Ses.guncelle(o.hiz, o.girdi.gaz, sinirla(1 - enYakin / 1100, 0, 1), O.zaman);
+    const o = O.oyuncu, aracta = o instanceof Araba;
+    let enYakin = aracta && o.siren ? 300 : Infinity;
+    for (const p of O.arabalar) if (p.siren && p !== o) enYakin = Math.min(enYakin, mesafe(p.x, p.y, o.x, o.y));
+    Ses.guncelle(aracta ? o.hiz : 0, aracta ? o.girdi.gaz : 0, sinirla(1 - enYakin / 1100, 0, 1), O.zaman, aracta);
   }
 }
 
@@ -307,7 +431,6 @@ function binaCarpisma(a) {
       daireKutuCarpisma(a, Harita.katilar[id]);
     }
   }
-  // ağaç gövdeleri
   for (const t of Harita.agaclar) {
     const dx = a.x - t.x, dy = a.y - t.y;
     if (dx > 40 || dx < -40 || dy > 40 || dy < -40) continue;
@@ -318,7 +441,6 @@ function binaCarpisma(a) {
       carpismaTepki(a, nx, ny, t.x + nx * 7, t.y + ny * 7);
     }
   }
-  // harita sınırı
   const B = Harita.boyut;
   if (a.x < r) { a.x = r; if (a.vx < 0) a.vx *= -0.4; }
   if (a.x > B - r) { a.x = B - r; if (a.vx > 0) a.vx *= -0.4; }
@@ -332,7 +454,6 @@ function daireKutuCarpisma(a, k) {
   if (d2 >= a.r * a.r) return;
   let nx, ny;
   if (d2 < 0.0001) {
-    // merkez kutunun içine girmiş: en yakın kenardan dışarı it
     const sol = a.x - k.x, sag = k.x + k.w - a.x, ust = a.y - k.y, alt = k.y + k.h - a.y;
     const m = Math.min(sol, sag, ust, alt);
     if (m === sol) { nx = -1; ny = 0; a.x = k.x - a.r; }
@@ -350,7 +471,7 @@ function daireKutuCarpisma(a, k) {
 function carpismaTepki(a, nx, ny, x, y) {
   const vn = a.vx * nx + a.vy * ny;
   if (vn >= 0) return;
-  a.vx -= 1.35 * vn * nx; a.vy -= 1.35 * vn * ny; // sek
+  a.vx -= 1.35 * vn * nx; a.vy -= 1.35 * vn * ny;
   a.vx *= 0.85; a.vy *= 0.85;
   a.donusHizi += (Math.random() - 0.5) * Math.min(3, -vn / 120);
   darbe(a, -vn, x, y);
@@ -403,13 +524,47 @@ function oyuncuCarpismaOlayi(a, b, guc, yaklasA, yaklasB) {
   else { O.isiEkle(3); O.kaosEkle(3, o.x, o.y); }
 }
 
-// Çarpmanın hasarı, kıvılcımı ve sesi
+// Arabalar ve yayalar
+function yayaCarpismalari() {
+  const O = Oyun, ben = O.oyuncu;
+  const liste = ben instanceof Yaya ? O.yayalar.concat(ben) : O.yayalar;
+  for (const a of O.arabalar) {
+    const h = a.hiz;
+    for (const y of liste) {
+      const dx = y.x - a.x, dy = y.y - a.y, min = a.r + y.r - 2;
+      if (dx > min || dx < -min || dy > min || dy < -min) continue;
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= min * min) continue;
+      const d = Math.sqrt(d2) || 1, nx = dx / d, ny = dy / d;
+      y.x = a.x + nx * min; y.y = a.y + ny * min; // yayayı kenara it
+      if (h < 70 || y.durum === 'yerde') continue;
+      yayaCarpildi(y, a, nx, ny);
+    }
+  }
+}
+
+function yayaCarpildi(y, a, nx, ny) {
+  const O = Oyun, ben = O.oyuncu, guc = a.hiz;
+  y.dusur(a.vx * 0.6 + nx * 120, a.vy * 0.6 + ny * 120, y === ben ? 1.6 : aralik(2.5, 4));
+  a.vx *= 0.95; a.vy *= 0.95;
+  if (O.gorusteMi(y.x, y.y)) Efekt.yazi(y.x, y.y - 16, '💫', '#ffffff');
+  const uz = mesafe(y.x, y.y, ben.x, ben.y);
+  if (uz < 600) Ses.tok(1 - uz / 600);
+  if (y === ben) {
+    y.can -= (guc - 60) * 0.12;
+    O.kamera.sarsinti = Math.max(O.kamera.sarsinti, 8);
+    if (y.can <= 0) oyuncuBayildi();
+    return;
+  }
+  if (a === ben && O.durum === 'oyun') { O.kaosEkle(5, ben.x, ben.y); O.isiEkle(12); }
+}
+
 function darbe(a, guc, x, y) {
   if (guc < 60) return;
   const O = Oyun, o = O.oyuncu;
   let hasar = (guc - 60) * 0.068;
   if (a === o) {
-    hasar *= 1 - 0.15 * O.kayit.zirh;
+    hasar *= (1 - 0.15 * O.kayit.zirh) * a.zirhCarpani;
     O.kamera.sarsinti = Math.max(O.kamera.sarsinti, Math.min(14, guc / 35));
     Gorevler.oyuncuCarpti(guc);
   }
@@ -432,7 +587,6 @@ function arabaYikildi(a) {
     Ses.patlama(1 - uz / 900);
     if (O.durum === 'oyun') O.kamera.sarsinti = Math.max(O.kamera.sarsinti, 16 * (1 - uz / 900));
   }
-  // patlama çevresindeki arabaları ve eşyaları savurur
   for (const b of O.arabalar) {
     if (b === a) continue;
     const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
@@ -443,9 +597,19 @@ function arabaYikildi(a) {
       darbe(b, 220 * k, b.x, b.y);
     }
   }
+  const yayalar = o instanceof Yaya ? O.yayalar.concat(o) : O.yayalar;
+  for (const y of yayalar) {
+    const dx = y.x - a.x, dy = y.y - a.y, d = Math.hypot(dx, dy) || 1;
+    if (d < 120 && y.durum !== 'yerde') {
+      y.dusur(dx / d * 260, dy / d * 260, 2.5);
+      if (y === o) { y.can -= 35 * (1 - d / 120); if (y.can <= 0) oyuncuBayildi(); }
+    }
+  }
   for (const p of Harita.esyalar) {
     if (p.kirik) continue;
-    const dx = p.x - a.x, dy = p.y - a.y, d = Math.hypot(dx, dy) || 1;
+    const dx = p.x - a.x, dy = p.y - a.y;
+    if (dx > 110 || dx < -110 || dy > 110 || dy < -110) continue;
+    const d = Math.hypot(dx, dy) || 1;
     if (d < 110) {
       p.kirik = true; p.kirikZaman = O.zaman;
       p.vx = dx / d * 260; p.vy = dy / d * 260; p.don = aralik(-15, 15);
@@ -462,13 +626,22 @@ function arabaYikildi(a) {
 
 // ── Kaldırım eşyaları ──
 function esyaCarpismalari() {
+  const T = TILE, I = Harita.esyaIzgara;
   for (const a of Oyun.arabalar) {
     if (a.hiz < 25) continue;
-    for (const p of Harita.esyalar) {
-      if (p.kirik) continue;
-      const dx = p.x - a.x, dy = p.y - a.y, min = a.r + p.r;
-      if (dx > min || dx < -min || dy > min || dy < -min || dx * dx + dy * dy > min * min) continue;
-      esyaKir(p, a);
+    const tx0 = Math.max(0, Math.floor((a.x - 30) / T)), tx1 = Math.min(HN - 1, Math.floor((a.x + 30) / T));
+    const ty0 = Math.max(0, Math.floor((a.y - 30) / T)), ty1 = Math.min(HN - 1, Math.floor((a.y + 30) / T));
+    for (let ty = ty0; ty <= ty1; ty++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        const liste = I[ty * HN + tx];
+        if (!liste) continue;
+        for (const p of liste) {
+          if (p.kirik) continue;
+          const dx = p.x - a.x, dy = p.y - a.y, min = a.r + p.r;
+          if (dx > min || dx < -min || dy > min || dy < -min || dx * dx + dy * dy > min * min) continue;
+          esyaKir(p, a);
+        }
+      }
     }
   }
 }
@@ -495,32 +668,44 @@ function esyaGuncelle(dt) {
       p.vx *= k; p.vy *= k; p.aci += p.don * dt; p.don *= k;
       if (Math.abs(p.vx) + Math.abs(p.vy) < 2) { p.vx = 0; p.vy = 0; }
     }
-    if (p.su > 0) { // kırık hidrant su fışkırtır
+    if (p.su > 0) {
       p.su -= dt;
       if (O.gorusteMi(p.ox, p.oy)) for (let i = 0; i < 3; i++) Efekt.su(p.ox, p.oy);
     }
-    // 90 saniye sonra, kimse bakmıyorken belediye eşyayı yerine koyar
     if (O.zaman - p.kirikZaman > 90 && !O.gorusteMi(p.ox, p.oy, 100) && !O.gorusteMi(p.x, p.y, 100)) {
       p.kirik = false; p.x = p.ox; p.y = p.oy; p.aci = p.oAci; p.vx = p.vy = p.don = 0; p.su = 0;
     }
   }
 }
 
-// Kayan lastiklerin izi zemin tuvaline kalıcı çizilir
+// Yanan binalardan alev ve duman
+function yanginGuncelle(dt) {
+  for (const b of Gorevler.yananlar()) {
+    if (!Oyun.gorusteMi(b.x + b.w / 2, b.y + b.h / 2, 250)) continue;
+    const n = dt * 75 * b.yangin;
+    for (let i = 0; i < Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); i++)
+      Efekt.alev(b.x + b.ox + Math.random() * b.w, b.y + b.oy + Math.random() * b.h);
+    if (Math.random() < dt * 8) Efekt.duman(b.x + b.ox + Math.random() * b.w, b.y + b.oy + Math.random() * b.h, true, true);
+  }
+}
+
+// Hızla su birikintisinden geçince su sıçrar
+function birikintiSicrat(a) {
+  for (const b of Harita.birikintiler) {
+    const dx = a.x - b.x, dy = a.y - b.y;
+    if (dx > b.rx || dx < -b.rx || dy > b.rx || dy < -b.rx) continue;
+    for (let i = 0; i < 3; i++) Efekt.su(a.x, a.y);
+    return;
+  }
+}
+
 function izBirak(a) {
   const iz = !a.yikik && (a.kayma > 120 || (a.girdi.elFreni && a.hiz > 90) || (a.girdi.fren > 0 && a.ileriHiz() > 250));
   if (!iz) { a.sonIz = null; return; }
   const c = Math.cos(a.aci), s = Math.sin(a.aci), arka = a.uzun / 2 - 7, yan = a.gen / 2 - 3;
   const bx = a.x - c * arka, by = a.y - s * arka;
   const p1x = bx - s * yan, p1y = by + c * yan, p2x = bx + s * yan, p2y = by - c * yan;
-  if (a.sonIz) {
-    const z = Harita.zg;
-    z.strokeStyle = 'rgba(18,18,22,0.22)'; z.lineWidth = 4; z.lineCap = 'round';
-    z.beginPath();
-    z.moveTo(a.sonIz[0], a.sonIz[1]); z.lineTo(p1x, p1y);
-    z.moveTo(a.sonIz[2], a.sonIz[3]); z.lineTo(p2x, p2y);
-    z.stroke();
-  }
+  if (a.sonIz) Harita.izCiz(a.sonIz[0], a.sonIz[1], p1x, p1y, a.sonIz[2], a.sonIz[3], p2x, p2y);
   a.sonIz = [p1x, p1y, p2x, p2y];
 }
 
@@ -535,7 +720,7 @@ function isiGuncelle(dt) {
   }
   if (O.yildiz > 0) {
     if (O.polisGoruyor) O.gizliSure = 0; else O.gizliSure += dt;
-    if (O.gizliSure > 4) O.isi -= 16 * dt; // 4 sn gözden kaybolursan aranma düşmeye başlar
+    if (O.gizliSure > 4) O.isi -= 16 * dt;
   } else {
     O.gizliSure = 0;
     O.isi -= 4 * dt;
@@ -556,7 +741,7 @@ function isiGuncelle(dt) {
 function polisYonet(dt) {
   const O = Oyun, o = O.oyuncu;
   const polisler = O.arabalar.filter(a => a.tur === 'polis' && !a.yikik);
-  const istenen = O.yildiz === 0 ? 2 : Math.min(8, 2 + Math.round(O.yildiz * 1.3));
+  const istenen = O.yildiz === 0 ? DEVRIYE_SAYISI : Math.min(9, DEVRIYE_SAYISI + Math.round(O.yildiz * 1.3));
   O.polisSayac -= dt;
   if (polisler.length < istenen && O.polisSayac <= 0) {
     O.polisSayac = O.yildiz > 0 ? Math.max(0.6, 2 - O.yildiz * 0.3) : 8;
@@ -567,8 +752,7 @@ function polisYonet(dt) {
       p.vx = Math.cos(s.aci) * 150; p.vy = Math.sin(s.aci) * 150;
     }
   }
-  // aranmıyorsan fazla polisler (uzakta ve ekran dışındaysa) çekilir
-  if (O.yildiz === 0 && polisler.length > 2) {
+  if (O.yildiz === 0 && polisler.length > DEVRIYE_SAYISI) {
     let en = null, enD = 0;
     for (const p of polisler) {
       const d = mesafe(p.x, p.y, o.x, o.y);
@@ -591,6 +775,11 @@ function temizle() {
   const O = Oyun;
   O.arabalar = O.arabalar.filter(a => a === O.oyuncu || !(a.sil ||
     (a.yikik && O.zaman - a.yikilmaZamani > 12 && !O.gorusteMi(a.x, a.y, 100))));
+  // çalınan arabaların sürücüleri kalabalığı şişirmesin
+  if (O.yayalar.length > YAYA_SAYISI + 15) {
+    const i = O.yayalar.findIndex(y => !O.gorusteMi(y.x, y.y, 200));
+    if (i >= 0) O.yayalar.splice(i, 1);
+  }
 }
 
 function yakalanmaKontrol(dt) {
@@ -623,21 +812,44 @@ function oyuncuPert() {
   Hud.duyuru('PERT! 💥', `Araban çekiciyle tamirhaneye... -${paraYaz(ceza)}`, '#ef476f');
 }
 
+function oyuncuBayildi() {
+  const O = Oyun;
+  if (O.durum !== 'oyun' || O.olay) return;
+  const ceza = Math.min(O.kayit.para, 150);
+  O.olay = { tur: 'bayildi', sure: 3, ceza };
+  O.kayit.bayilma++;
+  Gorevler.iptal();
+  Hud.duyuru('BAYILDIN! 😵', `Hastaneye kaldırılıyorsun... -${paraYaz(ceza)}`, '#ef476f');
+  Ses.basarisiz();
+}
+
 function olayGuncelle(dt) {
   const O = Oyun;
   if (!O.olay) return;
   O.olay.sure -= dt;
   if (O.olay.sure > 0) return;
-  const o = O.oyuncu, e = O.olay;
+  const e = O.olay;
   O.olay = null;
   O.paraEkle(-e.ceza);
-  const t = Harita.tamirhane;
-  const yer = e.tur === 'pert' ? { x: t.x + t.w / 2, y: t.y + t.h / 2 } : Harita.karakol;
-  o.x = yer.x; o.y = yer.y; o.vx = o.vy = 0; o.aci = Math.PI / 2; o.donusHizi = 0; o.sonIz = null;
-  if (e.tur === 'pert') { o.yikik = false; o.can = 100; }
-  o.nitroDepo = 1;
+  let o = O.oyuncu;
+  if (e.tur === 'pert') {
+    // yanan araba geride kalır, tamirhanede yeni spor araba seni bekler
+    if (o instanceof Araba) o.tur = 'park';
+    o = O.oyuncu = oyuncuArabasiOlustur(enYakinTamirhane(o.x, o.y));
+    O.oyuncuOzellik();
+  } else if (e.tur === 'bayildi') {
+    const h = Harita.hastane;
+    o = O.oyuncu = new Yaya(h.x, h.y, { oyuncu: true, gomlek: '#ffd60a' });
+    O.yayaCan = 100;
+  } else {
+    const k = Harita.karakol;
+    o.x = k.x; o.y = k.y;
+  }
+  o.vx = o.vy = 0; o.aci = Math.PI / 2;
+  if (o instanceof Araba) { o.donusHizi = 0; o.sonIz = null; o.nitroDepo = 1; }
+  else { o.durum = 'yuru'; }
   O.isi = 0; O.yildiz = 0; O.gizliSure = 0;
-  for (const a of O.arabalar) if (a !== o && mesafe(a.x, a.y, o.x, o.y) < 90) a.sil = true; // doğduğun yeri boşalt
+  for (const a of O.arabalar) if (a !== o && mesafe(a.x, a.y, o.x, o.y) < 90 && a.tur !== 'park') a.sil = true;
   O.kamera.x = o.x; O.kamera.y = o.y;
   O.kaydet();
 }
@@ -646,17 +858,18 @@ function olayGuncelle(dt) {
 function kameraGuncelle(dt) {
   const O = Oyun, k = O.kamera;
   if (O.durum === 'giris' && (!O.izlenen || O.izlenen.yikik || !O.arabalar.includes(O.izlenen) || O.zaman > O.izlemeBitis)) {
-    // giriş ekranının arkasında rastgele bir sivili takip et
     O.izlenen = sec(O.arabalar.filter(a => a.tur === 'sivil' && !a.yikik)) || O.oyuncu;
     O.izlemeBitis = O.zaman + 14;
     k.x = O.izlenen.x; k.y = O.izlenen.y;
   }
   const h = O.durum === 'giris' ? O.izlenen : O.oyuncu;
-  const hx = h.x + h.vx * 0.35, hy = h.y + h.vy * 0.35, yum = 1 - Math.exp(-5 * dt);
+  const yuruyor = h instanceof Yaya;
+  const on = yuruyor ? 0.2 : 0.35;
+  const hx = h.x + h.vx * on, hy = h.y + h.vy * on, yum = 1 - Math.exp(-5 * dt);
   k.x += (hx - k.x) * yum;
   k.y += (hy - k.y) * yum;
   const temel = sinirla(Math.min(innerWidth, innerHeight) / 800, 0.6, 1.3);
-  const hedefZoom = temel * (1 - 0.22 * Math.min(1, h.hiz / 650)) * (O.durum === 'giris' ? 1.15 : 1);
+  const hedefZoom = yuruyor ? temel * 1.35 : temel * (1 - 0.22 * Math.min(1, h.hiz / 650)) * (O.durum === 'giris' ? 1.15 : 1);
   k.zoom += (hedefZoom - k.zoom) * Math.min(1, 2 * dt);
   k.sarsinti *= Math.exp(-7 * dt);
   if (k.sarsinti < 0.05) k.sarsinti = 0;
@@ -665,6 +878,7 @@ function kameraGuncelle(dt) {
 // ── Çizim ──
 function ciz() {
   const W = tuval.width, H = tuval.height, k = Oyun.kamera, s = k.zoom * Oyun.dpr;
+  if (!W || !H) return; // pencere küçültülmüş / görünmüyor
   const kx = k.x + (Math.random() - 0.5) * k.sarsinti, ky = k.y + (Math.random() - 0.5) * k.sarsinti;
   const dunya = () => g.setTransform(s, 0, 0, s, W / 2 - kx * s, H / 2 - ky * s);
 
@@ -675,19 +889,23 @@ function ciz() {
   const gw = W / s, gh = H / s;
   Oyun.gorus = { x0: kx - gw / 2, y0: ky - gh / 2, x1: kx + gw / 2, y1: ky + gh / 2 };
 
-  // zemin: büyük tuvalin yalnız görünen parçası
-  const v = Oyun.gorus;
-  const x0 = Math.max(0, Math.floor(v.x0)), y0 = Math.max(0, Math.floor(v.y0));
-  const x1 = Math.min(Harita.boyut, Math.ceil(v.x1)), y1 = Math.min(Harita.boyut, Math.ceil(v.y1));
-  if (x1 > x0 && y1 > y0) g.drawImage(Harita.tuval, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0);
-
+  Harita.zeminiCiz(g, Oyun.gorus);
+  Hava.birikintiCiz(g);
   gorevIsaretleriCiz(g);
   esyalariCiz(g);
-  for (const a of Oyun.arabalar) if (Oyun.gorusteMi(a.x, a.y, 60)) a.ciz(g, Oyun.zaman);
-  Efekt.ciz(g);
+  const z = Oyun.zaman, yagmur = Hava.guc;
+  for (const y of Oyun.yayalar) if (Oyun.gorusteMi(y.x, y.y, 30)) y.ciz(g, z, yagmur);
+  const hasta = Gorevler.aktif && Gorevler.aktif.hastaYaya;
+  if (hasta && Oyun.gorusteMi(hasta.x, hasta.y, 30)) hasta.ciz(g, z, 0);
+  for (const a of Oyun.arabalar) if (Oyun.gorusteMi(a.x, a.y, 60)) a.ciz(g, z);
+  if (Oyun.oyuncu instanceof Yaya) Oyun.oyuncu.ciz(g, z, yagmur);
+  Efekt.ciz(g, false);
   binalariCiz(g, kx, ky);
   agaclariCiz(g, kx, ky);
+  Efekt.ciz(g, true);
   isiklandirma(W, H, s, kx, ky);
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  Hava.ekranCiz(g, W, H, Oyun.dpr, sonDt);
 
   dunya();
   okCiz(g);
@@ -704,6 +922,13 @@ function gorevIsaretleriCiz(c) {
       if (!Oyun.gorusteMi(n.x, n.y, 60)) continue;
       const t = GOREV_TURLERI[n.tur];
       isaret(c, n.x, n.y, 26 + Math.sin(z * 4) * 3, t.renk, t.ikon, t.ad);
+    }
+    // istasyondaki görev araçları
+    for (const tur of ['ambulans', 'itfaiye']) {
+      const a = Oyun.istasyon[tur];
+      if (!a || a === Oyun.oyuncu || a.yikik || !Oyun.gorusteMi(a.x, a.y, 60)) continue;
+      const t = GOREV_TURLERI[tur];
+      isaret(c, a.x, a.y, a.uzun / 2 + 10 + Math.sin(z * 4) * 3, t.renk, '', t.ad + ' görevi');
     }
     return;
   }
@@ -732,8 +957,7 @@ function isaret(c, x, y, r, renk, ikon, etiket) {
   c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.stroke();
   c.setLineDash([]);
   c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.font = '800 22px Rubik, sans-serif';
-  c.fillStyle = '#fff'; c.fillText(ikon, x, y + 1);
+  if (ikon) { c.font = '800 22px Rubik, sans-serif'; c.fillStyle = '#fff'; c.fillText(ikon, x, y + 1); }
   if (etiket) {
     c.font = '800 13px Rubik, sans-serif'; c.lineWidth = 4; c.lineJoin = 'round';
     c.strokeStyle = 'rgba(0,0,0,0.7)'; c.strokeText(etiket, x, y + r + 14);
@@ -804,7 +1028,6 @@ function esyalariCiz(c) {
   }
 }
 
-// Binalar: çatı kameradan uzaklaştıkça kayar, aradaki duvarlar çizilir → sahte 3B
 function binalariCiz(c, kx, ky) {
   const v = Oyun.gorus;
   Oyun.cizilenBinalar.length = 0;
@@ -822,6 +1045,7 @@ function binalariCiz(c, kx, ky) {
     katCizgileri(c, b, 'rgba(0,0,0,0.13)', null);
 
     c.fillStyle = b.renk; c.fillRect(rx, ry, w, h);
+    if (b.yangin > 0) { c.fillStyle = `rgba(40,20,10,${0.45 * b.yangin})`; c.fillRect(rx, ry, w, h); }
     c.strokeStyle = b.kenar; c.lineWidth = 3; c.strokeRect(rx + 1.5, ry + 1.5, w - 3, h - 3);
     c.fillStyle = 'rgba(255,255,255,0.08)'; c.fillRect(rx + 3, ry + 3, w - 6, 5);
     for (const q of b.kutular) {
@@ -832,7 +1056,7 @@ function binalariCiz(c, kx, ky) {
     if (b.etiket) {
       c.font = '800 20px Rubik, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
       c.fillStyle = 'rgba(0,0,0,0.35)'; c.fillText(b.etiket, rx + w / 2 + 2, ry + h / 2 + 2);
-      c.fillStyle = '#fff'; c.fillText(b.etiket, rx + w / 2, ry + h / 2);
+      c.fillStyle = b.etiketRenk; c.fillText(b.etiket, rx + w / 2, ry + h / 2);
     }
   }
 }
@@ -843,7 +1067,6 @@ function dortgen(c, x1, y1, x2, y2, x3, y3, x4, y4, renk) {
   c.fill();
 }
 
-// Duvarlardaki kat çizgileri (gece aynı çizgiler kesikli çizilip pencere ışığı olur)
 function katCizgileri(c, b, renk, desen) {
   if (!b.ox && !b.oy) return;
   const adim = Math.max(1, Math.ceil(b.kat / 8));
@@ -871,17 +1094,16 @@ function agaclariCiz(c, kx, ky) {
   }
 }
 
-// ── Gece/gündüz ve ışıklar ──
+// ── Gece/gündüz, yağmur karanlığı ve ışıklar ──
 function isiklandirma(W, H, s, kx, ky) {
   const kk = Math.cos((Oyun.gunZamani - 0.75) * Math.PI * 2); // 1 = gece yarısı, -1 = öğlen
-  const karanlik = sinirla((kk - 0.3) * 1.6, 0, 1);
-  const aksam = Math.max(0, 1 - Math.abs(kk - 0.15) / 0.35);
+  const karanlik = Math.max(sinirla((kk - 0.3) * 1.6, 0, 1), Hava.guc * 0.45);
+  const aksam = Math.max(0, 1 - Math.abs(kk - 0.15) / 0.35) * (1 - Hava.guc);
   Oyun.karanlik = karanlik;
   g.setTransform(1, 0, 0, 1, 0, 0);
   if (aksam > 0) { g.fillStyle = `rgba(255,120,60,${0.12 * aksam})`; g.fillRect(0, 0, W, H); }
   if (karanlik <= 0.01) return;
 
-  // 1) Karanlık bir katman hazırla, ışık olan yerleri ondan "sil"
   ig.globalCompositeOperation = 'source-over';
   ig.setTransform(1, 0, 0, 1, 0, 0);
   ig.clearRect(0, 0, W, H);
@@ -894,13 +1116,13 @@ function isiklandirma(W, H, s, kx, ky) {
   const o = Oyun.oyuncu;
   daireIsik(ig, o.x, o.y, 70, 0.6);
   for (const l of Oyun.anlikIsiklar) daireIsik(ig, l.x, l.y, l.r, 1 - l.yas / l.omur);
+  for (const b of Gorevler.yananlar()) daireIsik(ig, b.x + b.w / 2 + b.ox, b.y + b.h / 2 + b.oy, Math.max(b.w, b.h) * 0.9, 0.9 * b.yangin);
   const h = Gorevler.hedef();
   if (h) daireIsik(ig, h.x, h.y, 90, 0.75);
   if (!Gorevler.aktif) for (const n of Gorevler.noktalar) if (Oyun.gorusteMi(n.x, n.y, 100)) daireIsik(ig, n.x, n.y, 75, 0.75);
   ig.globalCompositeOperation = 'source-over';
   g.drawImage(isikTuval, 0, 0);
 
-  // 2) Renkli parıltılar: lambalar, stoplar, siren, pencereler
   g.setTransform(s, 0, 0, s, W / 2 - kx * s, H / 2 - ky * s);
   g.globalCompositeOperation = 'lighter';
   for (const l of Harita.lambalar) if (!l.kirik && Oyun.gorusteMi(l.x, l.y, 80)) renkliIsik(g, l.x, l.y, 46, '255,190,110', 0.22 * karanlik);
@@ -908,8 +1130,9 @@ function isiklandirma(W, H, s, kx, ky) {
     if (a.yikik || !Oyun.gorusteMi(a.x, a.y, 100)) continue;
     const c = Math.cos(a.aci), sn = Math.sin(a.aci);
     if (a.tur !== 'park') renkliIsik(g, a.x - c * a.uzun / 2, a.y - sn * a.uzun / 2, 16, '255,40,40', (a.girdi.fren > 0 ? 0.55 : 0.25) * karanlik);
-    if (a.siren) renkliIsik(g, a.x, a.y, 80, Math.floor(Oyun.zaman * 8) % 2 === 0 ? '255,50,50' : '60,120,255', 0.45 * karanlik);
+    if (a.siren) renkliIsik(g, a.x, a.y, 80, Math.floor(Oyun.zaman * 8) % 2 === 0 ? '255,50,50' : (a.polisAraci ? '60,120,255' : '255,255,255'), 0.45 * karanlik);
   }
+  for (const b of Gorevler.yananlar()) renkliIsik(g, b.x + b.w / 2 + b.ox, b.y + b.h / 2 + b.oy, Math.max(b.w, b.h) * 0.8, '255,120,40', 0.35 * karanlik * b.yangin);
   for (const b of Oyun.cizilenBinalar) katCizgileri(g, b, `rgba(255,200,120,${0.6 * karanlik * b.isikOran})`, b.pencere);
   g.globalCompositeOperation = 'source-over';
 }
@@ -941,5 +1164,4 @@ function farIsigi(c, a) {
   c.beginPath(); c.moveTo(fx, fy); c.arc(fx, fy, R, a.aci - 0.45, a.aci + 0.45); c.closePath(); c.fill();
 }
 
-// Yazı tipleri yüklenince başla (internet yoksa yine başlar)
 (document.fonts ? Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]) : Promise.resolve()).then(kur);

@@ -45,11 +45,12 @@ function takilmaKontrol(a, dt) {
 }
 
 // Önümde (aynı şeritte) en yakın araba ne kadar uzakta?
-function ondekiEngel(a, arabalar) {
+function ondekiEngel(a, arabalar, ekstra) {
   const c = Math.cos(a.aci), s = Math.sin(a.aci);
   const menzil = 60 + Math.max(0, a.ileriHiz()) * 0.35;
   let enYakin = Infinity;
-  for (const b of arabalar) {
+  const liste = ekstra ? arabalar.concat(ekstra) : arabalar;
+  for (const b of liste) {
     if (b === a) continue;
     const dx = b.x - a.x, dy = b.y - a.y;
     if (dx > menzil + 20 || dx < -menzil - 20 || dy > menzil + 20 || dy < -menzil - 20) continue;
@@ -96,7 +97,7 @@ function sivilYZ(a, dt, O) {
   let hedefHiz = a.seyirHizi;
   if (a.sabirsiz > 0) a.sabirsiz -= dt; // sabrı tükendi: öndekini umursamadan geç
   else {
-    const engel = ondekiEngel(a, O.arabalar);
+    const engel = ondekiEngel(a, O.arabalar, O.oyuncu instanceof Yaya ? O.oyuncu : null);
     if (engel < Infinity) hedefHiz = Math.min(hedefHiz, Math.max(0, (engel - 42) * 2.2));
     if (hedefHiz < 10) { a.bekleme += dt; if (a.bekleme > 4) { a.bekleme = 0; a.sabirsiz = 2; } }
     else a.bekleme = 0;

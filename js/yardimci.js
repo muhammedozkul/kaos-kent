@@ -98,11 +98,11 @@ const Ses = {
     for (let i = 0; i < n; i++) v[i] = (Math.random() * 2 - 1) * (1 - i / n);
   },
 
-  guncelle(hiz, gaz, siren, t) {
+  guncelle(hiz, gaz, siren, t, motorAcik = true) {
     if (!this.ctx) return;
     const z = this.ctx.currentTime;
     this.motor.frequency.setTargetAtTime(38 + hiz * 0.15 + gaz * 14, z, 0.06);
-    this.motorSes.gain.setTargetAtTime(0.035 + Math.min(1, hiz / 600) * 0.05 + gaz * 0.015, z, 0.1);
+    this.motorSes.gain.setTargetAtTime(motorAcik ? 0.035 + Math.min(1, hiz / 600) * 0.05 + gaz * 0.015 : 0, z, 0.1);
     this.siren.frequency.setTargetAtTime(Math.floor(t * 1.6) % 2 ? 960 : 720, z, 0.02);
     this.sirenSes.gain.setTargetAtTime(siren * 0.035, z, 0.2);
   },
@@ -112,7 +112,38 @@ const Ses = {
     const z = this.ctx.currentTime;
     this.motorSes.gain.setTargetAtTime(0, z, 0.1);
     this.sirenSes.gain.setTargetAtTime(0, z, 0.1);
+    if (this.yagmurSes) this.yagmurSes.gain.setTargetAtTime(0, z, 0.1);
   },
+
+  // Sürekli çalan yağmur hışırtısı (sesi yağmurun gücüne göre)
+  yagmur(guc) {
+    if (!this.ctx) return;
+    const c = this.ctx;
+    if (!this.yagmurSes) {
+      const n = c.sampleRate * 2, buf = c.createBuffer(1, n, c.sampleRate), v = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) v[i] = Math.random() * 2 - 1;
+      const k = c.createBufferSource(); k.buffer = buf; k.loop = true;
+      const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 2500; f.Q.value = 0.6;
+      this.yagmurSes = c.createGain(); this.yagmurSes.gain.value = 0;
+      k.connect(f); f.connect(this.yagmurSes); this.yagmurSes.connect(this.ana);
+      k.start();
+    }
+    this.yagmurSes.gain.setTargetAtTime(guc * 0.09, c.currentTime, 0.5);
+  },
+
+  // Gök gürültüsü
+  gok() {
+    if (!this.ctx) return;
+    const c = this.ctx, z = c.currentTime + aralik(0.2, 0.8);
+    const k = c.createBufferSource(); k.buffer = this.gurultu; k.playbackRate.value = 0.35;
+    const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 180;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, z); g.gain.exponentialRampToValueAtTime(0.7, z + 0.08); g.gain.exponentialRampToValueAtTime(0.001, z + 2.2);
+    k.connect(f); f.connect(g); g.connect(this.ana);
+    k.start(z); k.stop(z + 2.3);
+  },
+
+  tok(v) { this.ton(120, 0.12, 'sine', 0.25 * v); this.carpma(0.12 * v); },
 
   carpma(guc) {
     if (!this.ctx || guc <= 0.01) return;

@@ -10,7 +10,7 @@ const Hud = {
   kur() {
     for (const id of ['hud', 'para', 'saat', 'saat-ikon', 'kaos', 'yildizlar', 'gorev-panel', 'gorev-baslik',
       'gorev-detay', 'gorev-sure', 'bildirimler', 'duyuru', 'ipucu', 'yakalanma', 'yakalanma-dolu',
-      'hiz', 'can-dolu', 'nitro-dolu', 'mini'])
+      'hiz', 'can-dolu', 'nitro-dolu', 'mini', 'arac-ad'])
       this.e[id] = document.getElementById(id);
     for (let i = 0; i < 5; i++) {
       const s = document.createElement('span');
@@ -44,20 +44,33 @@ const Hud = {
     this.yaz('para', paraYaz(O.kayit.para));
     const saat = (O.gunZamani * 24 + 6) % 24, ss = Math.floor(saat), dk = Math.floor((saat - ss) * 6) * 10;
     this.yaz('saat', String(ss).padStart(2, '0') + ':' + String(dk).padStart(2, '0'));
-    this.yaz('saat-ikon', saat >= 6.5 && saat < 19.5 ? '☀️' : '🌙');
+    this.yaz('saat-ikon', Hava.ikon(!(saat >= 6.5 && saat < 19.5)));
     this.yaz('kaos', String(O.kayit.kaos));
+    const aracta = o instanceof Araba;
+    this.yaz('arac-ad', aracta ? '🚗 ' + o.ad : '🚶 Yaya');
     this.yaz('hiz', String(Math.round(o.hiz * 0.32)));
     this.genislik('can-dolu', o.can);
-    this.genislik('nitro-dolu', o.nitroDepo * 100);
+    this.genislik('nitro-dolu', aracta ? o.nitroDepo * 100 : 0);
     for (let i = 0; i < 5; i++) this.yildizlar[i].classList.toggle('dolu', i < O.yildiz);
     this.e.yildizlar.classList.toggle('ariyor', O.yildiz > 0 && O.gizliSure > 0.5);
 
     this.e.yakalanma.classList.toggle('gizli', O.yakalanma <= 0.05);
     this.genislik('yakalanma-dolu', O.yakalanma / 2.3 * 100);
 
-    const tamirde = O.tamirhanede() && !O.olay;
-    this.e.ipucu.classList.toggle('gizli', !tamirde);
-    if (tamirde) this.yaz('ipucu', O.yildiz > 0 ? '🚓 Polis peşindeyken tamirhane kapalı' : '<kbd>E</kbd> Tamirhaneye gir', 'innerHTML');
+    let ipucu = '';
+    if (!O.olay) {
+      if (O.tamirhanede()) ipucu = O.yildiz > 0 ? '🚓 Polis peşindeyken tamirhane kapalı' : '<kbd>E</kbd> Tamirhaneye gir';
+      else if (!aracta && o.durum !== 'yerde') {
+        const a = yakinAraba(o);
+        if (a) {
+          const ne = a.tur === 'polis' ? 'Polis arabasını çal ★★' : a.tur === 'sivil' ? `${a.ad} çal ★` :
+            (a.model === 'ambulans' || a.model === 'itfaiye') && !Gorevler.aktif ? `${a.ad} aracına bin · görev başlar` : `${a.ad} aracına bin`;
+          ipucu = `<kbd>F</kbd> ${ne}`;
+        }
+      }
+    }
+    this.e.ipucu.classList.toggle('gizli', !ipucu);
+    if (ipucu) this.yaz('ipucu', ipucu, 'innerHTML');
 
     Gorevler.panelGuncelle(this);
     this.miniCiz();
@@ -95,8 +108,10 @@ const Hud = {
     c.strokeRect(v.x0 * s, v.y0 * s, (v.x1 - v.x0) * s, (v.y1 - v.y0) * s);
 
     const nokta = (x, y, r, renk) => { c.fillStyle = renk; c.beginPath(); c.arc(x * s, y * s, r * k, 0, Math.PI * 2); c.fill(); };
-    const t = Harita.tamirhane;
-    nokta(t.x + t.w / 2, t.y + t.h / 2, 5, '#111'); nokta(t.x + t.w / 2, t.y + t.h / 2, 4, '#ff9f1c');
+    for (const t of Harita.tamirhaneler) { nokta(t.x + t.w / 2, t.y + t.h / 2, 5, '#111'); nokta(t.x + t.w / 2, t.y + t.h / 2, 4, '#ff9f1c'); }
+    const kare = (x, y, renk) => { c.fillStyle = '#111'; c.fillRect(x * s - 5 * k, y * s - 5 * k, 10 * k, 10 * k); c.fillStyle = renk; c.fillRect(x * s - 4 * k, y * s - 4 * k, 8 * k, 8 * k); };
+    kare(Harita.hastane.x, Harita.hastane.y, '#ff4d6d');
+    kare(Harita.itfaiye.x, Harita.itfaiye.y, '#ff6b35');
     if (!Gorevler.aktif) {
       for (const n of Gorevler.noktalar) { nokta(n.x, n.y, 5, '#111'); nokta(n.x, n.y, 4, GOREV_TURLERI[n.tur].renk); }
     }

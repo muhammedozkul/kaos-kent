@@ -106,6 +106,7 @@ kbd {
 .cubuk.nitro i { background: linear-gradient(90deg, #4cc9f0, #b5179e); }
 
 #sol-alt { position: absolute; left: 16px; bottom: 16px; padding: 12px 16px; }
+#arac-ad { font-size: 13px; font-weight: 700; color: var(--soluk); margin-bottom: 2px; }
 #hiz-kutu { display: flex; align-items: baseline; gap: 6px; }
 #hiz { font-family: 'Bungee', sans-serif; font-size: 40px; line-height: 1; min-width: 70px; }
 #hiz-kutu small { color: var(--soluk); font-weight: 600; }
