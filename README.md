@@ -7,6 +7,8 @@ Plain HTML + CSS + JavaScript (canvas). No installation, libraries or build step
 
 🎮 **Play now:** https://muhammedozkul.github.io/kaos-kent/
 
+<p align="center"><img src="media/demo.gif" alt="Driving and drifting through the city" width="720"></p>
+
 ## Running it
 
 ```bash

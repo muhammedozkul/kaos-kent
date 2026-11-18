@@ -7,6 +7,8 @@ Düz HTML + CSS + JavaScript (canvas). Kurulum, kütüphane ya da derleme yok.
 
 🎮 **Hemen oyna:** https://muhammedozkul.github.io/kaos-kent/
 
+<p align="center"><img src="media/demo.gif" alt="Şehirde araba sürüp drift atmak" width="720"></p>
+
 ## Çalıştırma
 
 ```bash
