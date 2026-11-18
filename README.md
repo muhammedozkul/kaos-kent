@@ -1,59 +1,61 @@
-# Kaos Kent
+**English** · [Türkçe](README.tr.md)
 
-Kuşbakışı bir şehirde araba sürdüğün, görev yapıp kaos çıkardığın bir tarayıcı oyunu.
-Düz HTML + CSS + JavaScript (canvas). Kurulum, kütüphane ya da derleme yok.
+# Kaos Kent (Chaos City)
 
-🎮 **Hemen oyna:** https://muhammedozkul.github.io/kaos-kent/
+A browser game where you drive around a top-down city, take on missions and cause chaos.
+Plain HTML + CSS + JavaScript (canvas). No installation, libraries or build step.
 
-## Çalıştırma
+🎮 **Play now:** https://muhammedozkul.github.io/kaos-kent/
+
+## Running it
 
 ```bash
 python3 -m http.server 8770 --directory ~/Projeler/kaos-kent
 ```
 
-Sonra tarayıcıda http://localhost:8770 adresini aç. (`index.html`'e çift tıklamak da çalışır.)
+Then open http://localhost:8770 in your browser. (Double-clicking `index.html` also works.)
 
-## Kontroller
+## Controls
 
-| Tuş | İş |
+| Key | Action |
 | --- | --- |
-| W A S D / oklar | sür |
-| Boşluk | el freni (drift) |
-| Shift | nitro (yürürken koşma) |
-| F | arabadan in / yakındaki arabaya bin (çal) |
-| E | tamirhane (turuncu alanın içindeyken) |
-| H | korna |
-| G | görevi bırak |
-| P / Esc | duraklat |
-| M | ses aç/kapat |
+| W A S D / arrows | drive |
+| Space | handbrake (drift) |
+| Shift | nitro (sprint while on foot) |
+| F | get out / get into a nearby car (steal it) |
+| E | repair shop (while inside the orange area) |
+| H | horn |
+| G | abandon mission |
+| P / Esc | pause |
+| M | sound on/off |
 
-## Oyunda neler var
+## What's in the game
 
-- **Şehir:** 102×102 karoluk harita (10×10 blok); yollar, kaldırımlar, sahte 3B binalar (çatı kameraya göre kayar), parklar, göller, otoparklar, 2 tamirhane, karakol, hastane ve itfaiye.
-- **Yayalar:** 130 kişi kaldırımlarda yürür; hızla gelen arabadan, kornadan ve patlamadan kaçışır. Çarpılırsa çizgi film usulü yere düşüp kalkar.
-- **Arabadan inip binme:** F ile in, yürü (Shift koşar), başka arabaya bin. Sivil araba çalarsan sürücü kaçar (★), polis arabası çalmak ★★. Her modelin hızı, ağırlığı ve dayanıklılığı farklı (spor, sedan, hatchback, kamyonet, polis, ambulans, itfaiye).
-- **Hava durumu:** açık / yağmur / fırtına kendiliğinden değişir. Yağmurda lastik tutuşu ve fren düşer, birikintiler belirir, yayalar şemsiye açar; fırtınada şimşek çakar.
-- **Trafik:** 70 sivil araba kendi şeridinde kavşaktan kavşağa gider, öndekine çarpmamak için yavaşlar.
-- **Polis ve yıldızlar:** Kaos çıkardıkça "ısı" birikir, 1–5 yıldız olur. Polis seni görüyorsa üstüne sürer, görmüyorsa kavşak kavşak arar. 4 saniye gözden kaybolursan yıldızlar düşer. Dururken polis yanına gelirse yakalanırsın.
-- **Görevler:** 🍕 kurye, 🚕 taksi, 🏁 sokak yarışı, 🚨 büyük kaçış, 💥 kaos saati, 📦 kurye zinciri (3 teslimat, giderek hızlanır). Hastanedeki ambulansa binince 🚑 ambulans görevi (hastayı al, hastaneye yetiştir), itfaiyedeki araca binince 🚒 itfaiye görevi (iki yangını söndür) başlar.
-- **Tamirhane:** tamir, motor / zırh / nitro yükseltmesi, boya.
-- **Gece-gündüz:** bir gün 5 dakika; gece farlar, sokak lambaları, pencere ışıkları ve siren ışıkları yanar.
-- **Efektler:** lastik izi (kalıcı), kıvılcım, duman, patlama, hidrant suyu, nitro alevi. Sesler Web Audio ile üretilir.
-- **Kayıt:** para, yükseltmeler ve istatistikler tarayıcıda (`localStorage`) saklanır.
+- **City:** a 102×102 tile map (10×10 blocks); roads, sidewalks, fake-3D buildings (rooftops shift with the camera), parks, lakes, parking lots, 2 repair shops, a police station, a hospital and a fire station.
+- **Pedestrians:** 130 people walk the sidewalks; they scatter from speeding cars, horns and explosions. If hit, they fall over cartoon-style and get back up.
+- **Getting in and out of cars:** press F to get out, walk (Shift to run), get into another car. Stealing a civilian car makes the driver flee (★), stealing a police car is ★★. Each model has its own speed, weight and durability (sports car, sedan, hatchback, pickup, police, ambulance, fire truck).
+- **Weather:** clear / rain / storm change on their own. In rain, tire grip and braking drop, puddles appear and pedestrians open umbrellas; in storms, lightning strikes.
+- **Traffic:** 70 civilian cars drive in their own lanes from junction to junction and slow down to avoid hitting the car in front.
+- **Police and stars:** the more chaos you cause, the more "heat" builds up, becoming 1–5 stars. If the police can see you, they drive at you; if not, they search junction by junction. Stay out of sight for 4 seconds and your stars drop. If the police reach you while you're stopped, you're busted.
+- **Missions:** 🍕 delivery, 🚕 taxi, 🏁 street race, 🚨 big escape, 💥 chaos hour, 📦 delivery chain (3 deliveries, getting faster). Get into the ambulance at the hospital for a 🚑 ambulance mission (pick up the patient, rush them to the hospital); get into the truck at the fire station for a 🚒 fire mission (put out two fires).
+- **Repair shop:** repairs, engine / armor / nitro upgrades, paint.
+- **Day and night:** one day lasts 5 minutes; at night headlights, street lamps, window lights and sirens light up.
+- **Effects:** tire marks (permanent), sparks, smoke, explosions, hydrant water, nitro flames. Sounds are generated with Web Audio.
+- **Saving:** money, upgrades and stats are stored in the browser (`localStorage`).
 
-## Dosyalar
+## Files
 
-| Dosya | Ne yapar |
+| File | What it does |
 | --- | --- |
-| `index.html` | Sayfa iskeleti, HUD, giriş/duraklatma/tamirhane ekranları |
-| `style.css` | Arayüz görünümü |
-| `js/yardimci.js` | Matematik yardımcıları, klavye, sesler |
-| `js/harita.js` | Şehrin üretimi, parça parça zemin çizimi, yol/kavşak sorguları |
-| `js/araba.js` | Araba modelleri, fiziği (ileri/yan hız, drift, ıslak yol) ve çizimi |
-| `js/efektler.js` | Parçacıklar (alev, su, yağmur halkası dahil) ve uçan yazılar |
-| `js/yaya.js` | Yayalar, yürüyen oyuncu, kaldırım halkası |
-| `js/hava.js` | Hava durumu, yağmur çizimi, birikintiler |
-| `js/trafik.js` | Sivil ve polis yapay zekâsı |
-| `js/gorevler.js` | Görev türleri ve görev paneli |
-| `js/hud.js` | Gösterge paneli, mini harita, tamirhane |
-| `js/oyun.js` | Ana döngü, çarpışmalar, aranma sistemi, kamera, ışıklandırma |
+| `index.html` | Page skeleton, HUD, start/pause/repair shop screens |
+| `style.css` | Interface look |
+| `js/yardimci.js` | Math helpers, keyboard, sounds |
+| `js/harita.js` | City generation, chunked ground drawing, road/junction queries |
+| `js/araba.js` | Car models, physics (forward/lateral speed, drift, wet roads) and drawing |
+| `js/efektler.js` | Particles (including flames, water, rain rings) and floating text |
+| `js/yaya.js` | Pedestrians, the player on foot, sidewalk loop |
+| `js/hava.js` | Weather, rain drawing, puddles |
+| `js/trafik.js` | Civilian and police AI |
+| `js/gorevler.js` | Mission types and mission panel |
+| `js/hud.js` | Dashboard, minimap, repair shop |
+| `js/oyun.js` | Main loop, collisions, wanted system, camera, lighting |
